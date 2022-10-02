@@ -1,6 +1,4 @@
 import algosdk from 'algosdk'
-import * as crypto from "crypto";
-import * as fs from 'fs'
 var sha256 = require('sha256');
 
 const keypress = async () => {
@@ -16,7 +14,7 @@ const keypress = async () => {
 // https://dispenser.testnet.aws.algodev.network/
 
 // const DISPENSERACCOUNT = "HZ57J3K46JIJXILONBBZOHX6BKPXEM2VVXNRFSUED6DKFD5ZD24PMJ3MVA";
-async function createAsset(algodClient: algosdk.Algodv2, userAccount: algosdk.Account, metadatahash: string, pon_number: string | undefined): Promise<any>{
+async function createAsset(algodClient: algosdk.Algodv2, userAccount: algosdk.Account | undefined, metadatafile: JSON, pon_id: string | undefined): Promise<any>{
     console.log("");
     console.log("==> CREATE ASSET");
     //Check account balance 
@@ -31,9 +29,9 @@ async function createAsset(algodClient: algosdk.Algodv2, userAccount: algosdk.Ac
     const params = await algodClient.getTransactionParams().do();
     const defaultFrozen = false;
     // Used to display asset units to user    
-    const unitName = pon_number; // E PON ID
+    const unitName = pon_id; // E PON ID
     // Friendly name of the asset    
-    const assetName = "PSA_E-PON"; 
+    const assetName = "PSA_E-PON:" + {unitName}; 
 
     //manager account can destroy asset
     const managerAddr = userAccount.addr; // OPTIONAL: FOR DEMO ONLY, USED TO DESTROY ASSET WITHIN
@@ -61,15 +59,16 @@ async function createAsset(algodClient: algosdk.Algodv2, userAccount: algosdk.Ac
     //this for generating metadatahash on site
     const fullPath =  __dirname + '/documents/metadata.json'; 
   
-    const metadatafile = (await fs.readFileSync(fullPath)); 
-    const hash = crypto.createHash('sha256');
-    hash.update(metadatafile);
+    // const metadatafile = (await fs.readFileSync(fullPath)); 
+    // const hash = crypto.createHash('sha256');
+    // hash.update(metadatafile);
 
-    const metadata = new Uint8Array(hash.digest());
+    // const metadata = new Uint8Array(hash.digest());
 
-    const text = sha256(JSON.stringify(metadatafile));
-    const text2 = '16efaa3924a6fd9d3a4824799a4ac65d';
-    console.log(text2)
+    const hash = sha256(JSON.stringify(metadatafile));
+    //need to truncate to 32 char
+    const trimmed = hash.substring(0, 32);
+    console.log(trimmed)
 
 
 
@@ -78,9 +77,9 @@ async function createAsset(algodClient: algosdk.Algodv2, userAccount: algosdk.Ac
         from: userAccount.addr,
         total,
         decimals,
-        assetName: metadatahash,
+        assetName,
         unitName,
-        assetMetadataHash: text2,
+        assetMetadataHash: trimmed,
         defaultFrozen,
         freeze: freezeAddr,
         manager: managerAddr,
@@ -171,13 +170,12 @@ const waitForConfirmation = async function (algodClient: algosdk.Algodv2, txId: 
     throw new Error("Transaction " + txId + " not confirmed after " + timeout + " rounds!");
 };
 // Function used to print created asset for account and assetid
-export const printCreatedAsset = async function ( assetid: any) {
+export const check_authenticity = async function ( metadatafile: JSON, asset_id: string ) {
     // note: if you have an indexer instance available it is easier to just use this
     //     let accountInfo = await indexerClient.searchAccounts()
     //    .assetID(assetIndex).do();
     // and in the loop below use this to extract the asset for a particular account
     // accountInfo['accounts'][idx][account]);
-    let walletAccount = createAccount();
     const account = 'F46HKJEGDFSZGPE4LIPZCFY7VABLSJRL3J3F7MDGJDTEKZKKSOQHYEDQVI';
     const algodToken = '2f3203f21e738a1de6110eba6984f9d03e5a95d7a577b34616854064cf2c0e7b';
     const algodServer = 'https://academy-algod.dev.aws.algodev.network';
@@ -187,35 +185,42 @@ export const printCreatedAsset = async function ( assetid: any) {
     let accountInfo = await algodClient.accountInformation(account).do();
     for (let idx = 0; idx < accountInfo['created-assets'].length; idx++) {
         let scrutinizedAsset = accountInfo['created-assets'][idx];
-        if (scrutinizedAsset['index'] == assetid) {
+        if (scrutinizedAsset['index'] == asset_id) {
             console.log("AssetID = " + scrutinizedAsset['index']);
-            let myparms = JSON.stringify(scrutinizedAsset['params'].name, undefined, 2);
+            let myparms = JSON.stringify(scrutinizedAsset['params'], undefined, 2);
             console.log("parms = " + myparms);
-            break;
+            const hash = sha256(JSON.stringify(metadatafile));
+            //need to truncate to 32 char
+            const trimmed = hash.substring(0, 32);
+            const b64_trim = Buffer.from(trimmed).toString("base64");
+            console.log(b64_trim);
+            const original = myparms
+            const obj = JSON.parse(original)
+            return (obj['metadata-hash']=== b64_trim);
         }
     }
 };
-// Function used to print asset holding for account and assetid
-export const printAssetHolding = async function (algodClient: algosdk.Algodv2, account: string, assetid: any) {
-    // note: if you have an indexer instance available it is easier to just use this
-    //     let accountInfo = await indexerClient.searchAccounts()
-    //    .assetID(assetIndex).do();
-    // and in the loop below use this to extract the asset for a particular account
-    // accountInfo['accounts'][idx][account]);
+// // Function used to print asset holding for account and assetid
+// export const printAssetHolding = async function (algodClient: algosdk.Algodv2, account: string, assetid: any) {
+//     // note: if you have an indexer instance available it is easier to just use this
+//     //     let accountInfo = await indexerClient.searchAccounts()
+//     //    .assetID(assetIndex).do();
+//     // and in the loop below use this to extract the asset for a particular account
+//     // accountInfo['accounts'][idx][account]);
     
-    let accountInfo = await algodClient.accountInformation(account).do();
-    for (let idx = 0; idx < accountInfo['assets'].length; idx++) {
-        let scrutinizedAsset = accountInfo['assets'][idx];
-        if (scrutinizedAsset['asset-id'] == assetid) {
-            let myassetholding = JSON.stringify(scrutinizedAsset, undefined, 2);
-            console.log("assetholdinginfo = " + myassetholding);
-            break;
-        }
-    }
-};
+//     let accountInfo = await algodClient.accountInformation(account).do();
+//     for (let idx = 0; idx < accountInfo['assets'].length; idx++) {
+//         let scrutinizedAsset = accountInfo['assets'][idx];
+//         if (scrutinizedAsset['asset-id'] == assetid) {
+//             let myassetholding = JSON.stringify(scrutinizedAsset, undefined, 2);
+//             console.log("assetholdinginfo = " + myassetholding);
+//             break;
+//         }
+//     }
+// };
 
 
-async function createNFT(metadatahash:string, pon_number:string) {
+export async function createNFT(metadata:JSON, pon_number:string) {
 
     try {
         let walletAccount = createAccount();
@@ -230,18 +235,20 @@ async function createNFT(metadatahash:string, pon_number:string) {
         let algodClient = new algosdk.Algodv2(algodToken, algodServer, algodPort);
 
         // CREATE ASSET
-        const { assetID } = await createAsset(algodClient, walletAccount, metadatahash, pon_number);
-        console.log("assetID: " + assetID)
+        const all = await createAsset(algodClient, walletAccount, metadata, pon_number);
+        console.log(all)
+        console.log("assetID: " + all.assetID)
         // DESTROY ASSET
         // await destroyAsset(algodClient, walletAccount, assetID); 
         // CLOSEOUT ALGOS - Alice closes out Alogs to dispenser
         // await closeoutAliceAlgos(algodClient, walletAccount);
-        
+        return all
         
 
     }
     catch (err) {
         console.log("err", err);
+        return err
     }
       process.exit();
 };
@@ -249,4 +256,4 @@ async function createNFT(metadatahash:string, pon_number:string) {
 
 
 // createNFT("sha-whatever", "12345678");
-printCreatedAsset('113999612')
+// printCreatedAsset('114015977')
