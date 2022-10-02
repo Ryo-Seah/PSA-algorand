@@ -1,6 +1,7 @@
 // import { express, response, request, NextFunction } from 'express'
 import Response from './lib/StandardResponse'
 import * as JD from 'decoders'
+import ('dotenv');
 import Joi from '@hapi/joi'
 import { createNFT, check_authenticity }from './create'
 const express = require('express');
@@ -43,7 +44,7 @@ app.post('/check', async function(req: any, res: any) {
 app.post('/mint', async function (req: any, res: any, ) {
   const schema = Joi.object({
     metadatafile: Joi.object(),
-    pon_id: Joi.string().max(8).required()
+    pon_id: Joi.string()
 
   })
   const result = await schema.validateAsync(req.body);
